@@ -1,14 +1,42 @@
 import com.google.common.collect.Lists;
-import com.kangpan.model.PageInfo;
 import org.junit.Test;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * java8 进阶学习
+ *
+ * 1. 计数
+ * Collectors.counting
+ * count
+ * 2. 最值
+ * Collectors.maxBy
+ * 3. 求和
+ * Collectors.summingInt
+ * 4. 求平均值
+ * Collectors.averagingInt
+ * 5. 连接字符串
+ * Collectors.joining
+ * 6. 一般归约
+ * Collectors.reducing
+ * 7. 转换
+ * Collectors.toCollection / Collectors.collectingAndThen
+ * 8. 数值流
+ * IntStream、DoubleStream、LongStream
+ * 9. 映射
+ * Collectors.toMap
+ * Function.identity()
+ * 10. 数据分区
+ * Collectors.partitioningBy
+ * 11. 分组
+ * Collectors.groupingBy
+ *
  *
  * @author Kangpan
  * @date 2020/10/31 10:20
@@ -24,99 +52,232 @@ public class Java8 {
             new People(6L, "薛之谦", "男", 28, 30)
     );
 
-
     /**
-     * 排序
-     * 1. 按照薪资降序
-     * 2. 按照年龄降序薪资升序
-     * 3. 考虑存在 NULL 的数据
-     * 4. 使用 Collections 排序
+     * 求集合薪资总和
+     * Stream.reduce (BiFunction) => Optional
+     * Collectors.reducing (identity, Function, BiFunction)
+     * Collectors.reducing (BiFunction)
+     * Collectors.summingDouble (ToDoubleFunction) => Collector
+     * Collectors.summarizingDouble (ToDoubleFunction) => DoubleSummaryStatistics
      */
     @Test
-    public void ex1() {
-        System.out.println("1. 按照薪资降序-------------------------------------------");
-        {
-            list.stream().sorted(Comparator.comparing(People::getSalary).reversed());
-            list.forEach(System.out::println); // 没有改变原list的顺序
-        }
-        System.out.println("2. 按照年龄降序薪资升序-------------------------------------------");
-        {
-            list.stream().sorted(Comparator.comparing(People::getAge).reversed().thenComparing(People::getSalary));
-        }
-        System.out.println("3. 考虑存在 NULL 的数据-------------------------------------------");
-        {
-            list.add(null);
-            list.sort(Comparator.nullsFirst(Comparator.comparing(People::getSalary))); // null 数据排前面
-            list.sort(Comparator.nullsLast(Comparator.comparing(People::getSalary)));
-            list.forEach(System.out::println); // 改变原list的顺序
-        }
-        System.out.println("4. 使用 Collections 排序-------------------------------------------");
-        {
-            Collections.sort(list.stream().filter(Objects::nonNull).collect(Collectors.toList()), Comparator.comparing(People::getSalary));
-            list.forEach(System.out::println); // 改变原list的顺序
-        }
+    public void example1() {
+        list.stream().map(People::getSalary).reduce((s1, s2) -> s1 + s2).ifPresent(System.out::println);
+        Optional<Double> opDouble = list.stream().map(People::getSalary).collect(Collectors.reducing((s1, s2) -> s1 + s2));
+        opDouble.ifPresent(System.out::println);
+
+        Number number = list.stream().collect(Collectors.reducing(0,People::getSalary,(s1,s2) -> s1.doubleValue() + s2.doubleValue()));
+        System.out.println(number.doubleValue());
+        System.out.println(list.stream().collect(Collectors.summingDouble(People::getSalary)));
+        System.out.println(list.stream().collect(Collectors.summarizingDouble(People::getSalary)).getSum());
+        System.out.println(list.stream().mapToDouble(People::getSalary).sum());
+    }
+
+    /**
+     * 求集合薪资最大 (最小)
+     * Stream.reduce (BiFunction) => Optional
+     * Collectors.reducing (BiFunction)
+     * Comparator.comparing (Function,Comparator) => Comparator
+     * Stream.max (Comparator) => Optional
+     * Collectors.maxBy (comparator) => Collector
+     * Collectors.summarizingDouble (ToDoubleFunction) => DoubleSummaryStatistics
+     * Comparator.comparing (Function) => Comparator
+     * findFirst => Optional
+     * Stream.sorted (Comparator) => Stream
+     * Collections.sort (list,Comparator) => void
+     * Collections.reverse (list) => void
+     * Comparator.comparingDouble (ToDoubleFunction) => Comparator
+     * Collectors.mapping (Function,Comparator) => Collector
+     * Stream.mapToDouble(ToDoubleFunction) => DoubleStream
+     */
+    @Test
+    public void example2() {
+        list.stream().collect(Collectors.maxBy(Comparator.comparing(People::getSalary))).ifPresent(people -> System.out.println(people.getSalary()));
+        list.stream().map(People::getSalary).reduce(BinaryOperator.maxBy(Double::compareTo)).ifPresent(System.out::println); // minBy()
+        list.stream().map(People::getSalary).reduce((s1,s2) -> s1 > s2 ? s1 : s2).ifPresent(System.out::println); // <
+        System.out.println(list.stream().map(People::getSalary).reduce(0d,Double::max));
+
+        Map<String,Optional<People>> mapOp = list.stream().collect(Collectors.groupingBy(People::getSex,Collectors.reducing((p1,p2) -> p1.getSalary() > p2.getSalary() ? p1 : p2)));
+        mapOp.get("男").ifPresent(people -> System.out.println(people.getSalary()));
+
+
+        list.stream().map(People::getSalary).collect(Collectors.reducing((s1,s2) -> s1 > s2 ? s1 : s2)).ifPresent(System.out::println);
+
+        list.stream().max(Comparator.comparing(People::getSalary,Double::compare)).ifPresent(p -> System.out.println(p.getSalary()));
+        list.stream().max(Comparator.comparing(People::getSalary)).ifPresent(p -> System.out.println(p.getSalary()));
+        list.stream().map(People::getSalary).max(Double::compareTo).ifPresent(System.out::println); // min
+        System.out.println(list.stream().collect(Collectors.summarizingDouble(People::getSalary)).getMax()); //getMin()
+
+        list.stream().sorted(Comparator.comparing(People::getSalary).reversed()).map(People::getSalary).findFirst().ifPresent(System.out::println); // reversed()
+        list.stream().map(People::getSalary).sorted(Comparator.reverseOrder()).findFirst().ifPresent(System.out::println); // Comparator.naturalOrder()
+        list.stream().map(People::getSalary).sorted(Comparator.comparingDouble(Double::doubleValue).reversed()).findFirst().ifPresent(System.out::println);
+
+        List<Double> doubles = list.stream().filter(Objects::nonNull).map(People::getSalary).collect(Collectors.toList());
+        Collections.sort(doubles, Double::compareTo);
+        System.out.println(doubles.get(doubles.size() - 1)); // get(0)
+        Collections.reverse(doubles);
+        doubles.stream().findFirst().ifPresent(System.out::println);
+
+        Map<String, People> map = list.stream().sorted(Comparator.comparing(People::getSalary, Double::compareTo))
+                .collect(Collectors.toMap(People::getSex, Function.identity(), (p1, p2) -> p2));
+        double d = map.get("男").getSalary() >  map.get("女").getSalary() ? map.get("男").getSalary() : map.get("女").getSalary();
+        System.out.println(d);
+
+        list.stream().mapToDouble(People::getSalary).max().ifPresent(System.out::println);
+        System.out.println(list.stream().mapToDouble(People::getSalary).max().getAsDouble());
+
+        Map<String, Optional<Integer>> collect = list.stream().collect(Collectors.groupingBy(People::getSex,
+                Collectors.mapping(People::getAge, Collectors.maxBy(Comparator.comparing(Function.identity())))));
+        collect.get("男").ifPresent(System.out::println);
+
+
+
+
+    }
+
+
+    /**
+     * 男生数量 女生数量
+     * filter (Predicate) => Stream
+     * Stream.count() => long
+     * Collectors.counting() => Collector
+     * Collectors.reducing (identity, Function, BiFunction)
+     * Collectors.groupingBy (Function) => Collector
+     * Collectors.collectingAndThen (Collector,Function)  => Collector
+     */
+    @Test
+    public void example3() {
+        list.stream().collect(Collectors.groupingBy(People::getSex,Collectors.counting())).forEach((k,v) -> System.out.println(k + ":" + v));
+        System.out.println("男:" + list.stream().filter(people -> people.getSex().equals("男")).count());
+        System.out.println("男:" + list.stream().filter(people -> people.getSex().equals("男")).collect(Collectors.counting()));
+        System.out.println("男:" + list.stream().filter(people -> people.getSex().equals("男")).collect(Collectors.reducing(0L, e -> 1L, Long::sum)));
+        System.out.println("男:" + list.stream().filter(people -> people.getSex().equals("男")).collect(Collectors.toList()).size());
+        System.out.println("男:" + list.stream().collect(Collectors.groupingBy(People::getSex)).get("男").size());
+        long count= list.stream().collect(Collectors.collectingAndThen(Collectors.groupingBy(People::getSex),map -> map.get("男").stream().count()));
+        System.out.println(count);
+    }
+
+    /**
+     * 平均
+     * Option.flatMap(Function<? super T, Optional<U>> mapper)
+     */
+    @Test
+    public void example4() {
+        double avg = list.stream().collect(Collectors.averagingDouble(People::getSalary));
+        System.out.println(avg);
+        System.out.println(list.stream().collect(Collectors.summarizingDouble(People::getSalary)).getAverage());
+        System.out.println(list.stream().map(People::getSalary).reduce((s1,s2) -> s1 + s2).flatMap(sum -> Optional.of(sum / list.size())).get());
+    }
+
+    /**
+     * 排序处理null
+     * collect(Collector)
+     * sort(Comparator)
+     * Comparator.nullsFirst(Comparator) => Comparator
+     * Comparator.comparing(Function) => Comparator
+     */
+    @Test
+    public void example5() {
+        list.add(null);
+        list.sort(Comparator.nullsFirst(Comparator.comparing(People::getSalary))); // null 数据排前面
+        list.sort(Comparator.nullsLast(Comparator.comparing(People::getSalary)));
+        CopyOnWriteArrayList list2 = list.stream().sorted(Comparator.nullsLast(Comparator.comparing(People::getSalary))).collect(Collectors.toCollection(CopyOnWriteArrayList::new));
+        list2.forEach(System.out::println);
+        Collections.sort(list,Comparator.nullsFirst(Comparator.comparing(People::getSalary)));
     }
 
     /**
      * 分组
-     * 1. map (男生集合 女生集合) 数量
-     * 2. 男生的平均薪资
-     * 3. 总数 平均 最大 最小 数量
-     * 4. 不同年龄男生女生集合
-     * 5. map(薪资最高的男生 薪资最高的女生 按薪资升序排序取最后一个)
-     * 6. map(年龄的)
+     * Collectors.groupingBy (Function, Collector)  => Collector
+     * Collectors.collectingAndThen (Collector, Function) => Collector
+     * Collectors.toMap (Function, Function,BiFunction) => Collector
+     * Collectors.mapping(Function, Collector) => Collector
      */
     @Test
-    public void ex2() {
-        System.out.println("1. map (男生集合 女生集合) 数量-------------------------------------------");
-        {
-            Map<String, List<People>> map = list.stream().collect(Collectors.groupingBy(People::getSex));
-            map.forEach((k, v) -> System.out.println(k + ":" + v));
-            System.out.println(map.get("女").size());
-            System.out.println(map.get("男").stream().count());
-            Map<String, Long> map1 = list.stream().collect(Collectors.groupingBy(People::getSex, Collectors.counting()));
-            map1.forEach((k, v) -> System.out.println(k + ":" + v));
-        }
-        System.out.println("2. 男生的平均薪资-------------------------------------------");
-        {
-            double avg = list.stream().filter(p -> p.getSex().equals("男")).collect(Collectors.averagingDouble(People::getSalary));
-            System.out.println(avg);
-        }
-        System.out.println("3. 总数 平均 最大 最小 数量-------------------------------------------");
-        {
-            DoubleSummaryStatistics statistics = list.stream().collect(Collectors.summarizingDouble(People::getSalary));
-            System.out.println(statistics.getAverage());
-            System.out.println(statistics.getMax());
-            System.out.println(statistics.getMin());
-            System.out.println(statistics.getCount());
-            System.out.println(statistics.getSum());
-            list.stream().map(People::getSalary).reduce((s1, s2) -> s1 + s2).ifPresent(System.out::println);
-            list.stream().map(People::getSalary).reduce(BinaryOperator.maxBy(Double::compareTo)).ifPresent(System.out::println);
-            list.stream().map(People::getSalary).reduce(BinaryOperator.minBy(Double::compareTo)).ifPresent(System.out::println);
-            list.stream().map(People::getSalary).max(Double::compareTo).ifPresent(System.out::println);
-            list.stream().map(People::getSalary).min(Double::compareTo).ifPresent(System.out::println);
+    public void example6() {
+        Map<Boolean, Map<Integer, List<People>>> map = list.stream().collect(
+                Collectors.partitioningBy(p -> p.getSex().equals("男"), Collectors.groupingBy(People::getAge)));
+        map.get(true).get(30).forEach(System.out::println); // 30岁男生集合
+        map.get(false).get(20).forEach(System.out::println); // 20岁女生集合
 
-        }
-        System.out.println("4. 不同年龄男生女生集合-------------------------------------------");
-        {
-            Map<Boolean, Map<Integer, List<People>>> map = list.stream().collect(
-                    Collectors.partitioningBy(p -> p.getSex().equals("男"), Collectors.groupingBy(People::getAge)));
-            map.get(true).get(30).forEach(System.out::println);
-            map.get(false).get(20).forEach(System.out::println);
+        Map<String, Map<Integer, List<People>>> map1 = list.stream().collect(
+                Collectors.groupingBy(People::getSex, Collectors.groupingBy(People::getAge)));
+        map1.get("男").get(30).forEach(System.out::println); // 30岁男生集合
 
-            Map<String, Map<Integer, List<People>>> map1 = list.stream().collect(
-                    Collectors.groupingBy(People::getSex, Collectors.groupingBy(People::getAge)));
-            map1.get("男").get(30).forEach(System.out::println);
-        }
-        System.out.println("5. map(薪资最高的男生 薪资最高的女生  按薪资升序排序取最后一个)-------------------------------------------");
-        {
-            Map<String, People> map = list.stream().sorted(Comparator.comparing(People::getSalary, Double::compareTo))
-                    .collect(Collectors.toMap(People::getSex, Function.identity(), (p1, p2) -> p2));
-            System.out.println(map.get("女"));
-            System.out.println(map.get("男"));
-        }
+        Map<String,People> map2 =
+        list.stream().collect(Collectors.groupingBy(People::getSex,Collectors.collectingAndThen(Collectors.maxBy(Comparator.comparing(People::getSalary)),Optional::get)));
+        System.out.println(map2.get("男")); // 按照性别筛选工资最高的男生
+
+        // 按照性别筛选工资最高的男生
+        System.out.println(list.stream().sorted(Comparator.comparing(People::getSalary)).collect(Collectors.toMap(People::getSex,Function.identity(),(p1,p2) -> p2)).get("男"));
+
+        Map<String,Set<Integer>> map3 =
+        list.stream().collect(Collectors.groupingBy(People::getSex,Collectors.mapping(People::getAge,Collectors.toSet())));
+        map3.get("男").forEach(System.out::println); // 按照性别筛选有哪些年龄
+
+        list.stream().filter(people -> people.getSex().equals("男")).map(People::getAge).collect(Collectors.toSet()).forEach(System.out::println); // 按照性别筛选有哪些年龄
+
+        // 按照年龄筛选分别对应有哪些人
+        list.stream().collect(Collectors.toMap(People::getAge,People::getName,String::concat)).forEach((k,v) -> System.out.println(k + ":" + v));
+        list.stream().collect(Collectors.toMap(People::getAge,People::getName,(name1,name2) -> name1 + "," + name2)).forEach((k,v) -> System.out.println(k + ":" + v));
+        Map<Integer,String> map4 = list.stream().collect(Collectors.groupingBy(People::getAge,
+                Collectors.reducing("",People::getName,(name1, name2) -> name1.length() == 0 ? name2 : name1 + "," + name2)));
+        System.out.println(map4.get(30));
+
+        // 集合名字最长
+        System.out.println(list.stream().map(p -> p.getName().length()).reduce(0,Integer::max));
+    }
+
+    /**
+     * flatMap(Optional/Stream)
+     */
+    @Test
+    public void example7() {
+        list.stream().map(People::getName).flatMap(str -> {
+            List<String> stringList = new ArrayList<>();
+            for(int i = 0; i < str.length(); i++) {
+                String temp = String.valueOf(str.charAt(i));
+                stringList.add(temp);
+            }
+            return stringList.stream();
+        }).distinct().collect(Collectors.toList()).forEach(System.out::println);
+
+        double d = list.stream().filter(people -> people.getName().equals("张杰")).mapToDouble(People::getSalary).sum();
+        System.out.println(Optional.ofNullable(d).flatMap(e -> Optional.of(e + 5)).flatMap(e -> Optional.of(e - 2)).get()); // 张杰的薪资涨5后又减2
+    }
+    /**
+     * 字符串处理
+     * Collector.of(Supplier,BiConsumer,BiFunction)
+     */
+    @Test
+    public void example8() {
+       // list.stream().sorted(Comparator.comparing(People::getAge).reversed().thenComparing(People::getSalary));
+        System.out.println(list.stream().map(People::getName).collect(Collectors.joining(",","(",")")));
+
+        Collector<People,StringJoiner,String> collector = Collector.of(
+                () -> new StringJoiner(","),
+                (stringJoiner,people) -> stringJoiner.add(people.getName()),
+                StringJoiner::merge,
+                StringJoiner::toString
+        );
+        System.out.println(list.stream().collect(collector));
+
+        StringJoiner field = new StringJoiner(",");
+        list.stream().map(People::getName).forEach(field::add);
+        System.out.println(field.toString());
+
+        System.out.println(list.stream().map(People::getName).reduce((name1,name2) -> name1.concat(",").concat(name2)).orElse(""));
+
     }
 }
+
+
+
+
+
+
+
+
 
 
 class People {
